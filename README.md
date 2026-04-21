@@ -5,22 +5,34 @@
 ## 功能特色
 
 - **拖放式上傳介面**：支援 PDF、PNG、JPG 等常見格式
-- **OCR 自動辨識**：使用 Tesseract.js 辨識中英文內容
+- **智能雙軌辨識**：
+  - 電子版 PDF → 直接提取文字 (快速、高準確度)
+  - 掃描版 PDF / 圖片 → 瀏覽器內 OCR 辨識 (繁中 + 英文)
 - **自動數據提取**：智能解析保單表格
-- **年化回報率 (IRR) 計算**：以牛頓法 + 二分法雙重保障的精確計算
-- **里程碑年度高亮**：每 5 年自動標記，方便顧問向客戶展示
+- **年化回報率 (IRR) 計算**：牛頓法 + 二分法雙重保障
+- **里程碑年度高亮**：每 5 年自動標記
 - **摘要卡片**：一眼看出回本年度、最終總現金價值、最終 IRR
-- **專業介面**：適合顧問在客戶面前展示使用
+- **原始文字檢視**：可查看 OCR 辨識結果以便除錯
+- **即時進度顯示**：讓顧問在客戶面前使用時不會有尷尬的等待
 
 ## 技術架構
 
+本專案採用「**前端重、後端輕**」的架構，確保 Netlify 部署穩定：
+
 | 層級 | 技術 |
 |---|---|
-| 前端 | 純 HTML + CSS + JavaScript (無框架，部署輕量) |
-| 後端 | Netlify Serverless Functions (Node.js) |
-| OCR | Tesseract.js (繁體中文 + 英文) |
-| PDF 解析 | pdfjs-dist + canvas |
-| 部署 | Netlify (靜態前端 + Functions) |
+| 前端 | HTML + CSS + JavaScript |
+| 前端 PDF 處理 | [pdf.js](https://mozilla.github.io/pdf.js/) (CDN 載入) |
+| 前端 OCR | [tesseract.js](https://tesseract.projectnaptha.com/) (CDN 載入) |
+| 後端 | Netlify Serverless Functions (Node.js，**零原生依賴**) |
+| 後端職責 | 僅做文字解析 + IRR 計算 |
+
+### 為什麼這樣設計？
+
+1. **避免 Netlify build 失敗**：將 OCR 放前端能繞開 `canvas` 等需要原生編譯的依賴
+2. **執行速度更快**：避免 Serverless Function 的冷啟動
+3. **成本更低**：OCR 在使用者瀏覽器執行，不消耗 Netlify Function 額度
+4. **無超時風險**：不受 Netlify 免費方案 10 秒執行限制
 
 ## 專案結構
 
@@ -28,14 +40,13 @@
 savingrate/
 ├── index.html              # 前端首頁
 ├── style.css               # 樣式
-├── script.js               # 前端邏輯
+├── script.js               # 前端邏輯 (PDF + OCR)
 ├── netlify.toml            # Netlify 設定
 ├── netlify/
 │   └── functions/
-│       ├── analyze.js      # 主入口 API
-│       ├── package.json    # Functions 依賴
+│       ├── analyze.js      # 主 API (純 JS，零依賴)
+│       ├── package.json
 │       └── lib/
-│           ├── ocr.js        # OCR 模組
 │           ├── parser.js     # 文字解析模組
 │           └── calculator.js # IRR 計算模組
 └── README.md
@@ -43,56 +54,39 @@ savingrate/
 
 ## 部署步驟 (Netlify)
 
-1. **連接 GitHub 儲存庫**
-   - 登入 [Netlify](https://app.netlify.com)
-   - 選擇 **Add new site** → **Import an existing project**
-   - 選擇 GitHub 並授權
-   - 選擇 `mickoo129/savingrate` 儲存庫
+1. 登入 [Netlify](https://app.netlify.com) → **Add new site** → **Import an existing project**
+2. 選擇 GitHub 並授權，選擇 `mickoo129/savingrate` 儲存庫
+3. 設定會自動從 `netlify.toml` 讀取，**直接點擊 Deploy Site**
+4. 部署通常在 1 分鐘內完成
 
-2. **設定建置選項** (Netlify 會自動從 `netlify.toml` 讀取)
-   - Build command: 留空
-   - Publish directory: `.`
-   - Functions directory: `netlify/functions`
+## 使用流程
 
-3. **點擊 Deploy Site**
-
-4. 第一次部署可能需 3-5 分鐘以安裝 OCR 相關依賴
-
-## 本地測試 (可選)
-
-```bash
-# 安裝 Netlify CLI
-npm install -g netlify-cli
-
-# 安裝 Functions 依賴
-cd netlify/functions
-npm install
-cd ../..
-
-# 啟動開發伺服器
-netlify dev
-```
-
-開啟瀏覽器訪問 http://localhost:8888
+1. 開啟網站
+2. 拖放或點擊上傳 PDF / 圖片
+3. 前端自動判斷文件類型並處理：
+   - 電子版 PDF：幾秒內完成
+   - 圖片或掃描版 PDF：視解析度與頁數，約 15-60 秒
+4. 處理結果送到 Netlify Function → 回傳結構化數據
+5. 前端顯示摘要卡片、完整年度表格、IRR 趨勢
 
 ## 使用注意事項
 
-1. **檔案大小**：單次上傳上限 6 MB (Netlify Functions 限制)
-2. **OCR 時間**：首次處理 PDF 可能需要 30-60 秒
-3. **辨識準確度**：取決於原始檔案的清晰度。若為截圖，建議使用高解析度截圖
-4. **保單格式差異**：不同保險公司的保單建議書格式不同，若辨識不理想，可能需要針對特定格式調整 `parser.js` 的解析規則
+1. **檔案大小**：建議 20 MB 以內
+2. **辨識品質**：OCR 準確度取決於原始檔案清晰度，建議使用原始電子版 PDF
+3. **瀏覽器相容性**：建議使用 Chrome / Edge / Safari 最新版
+4. **保單格式差異**：若辨識結果不理想，可點擊「原始文字」檢視 OCR 輸出，有助判斷是辨識問題還是解析規則問題
 
-## 後續優化方向 (Roadmap)
+## 後續優化方向
 
-- [ ] 第二階段：加入 Chart.js 繪製現金流圖表與 IRR 趨勢線
-- [ ] 第三階段：加入非保證紅利實現率滑桿 (壓力測試)
+- [ ] 加入 Chart.js 繪製現金流圖表與 IRR 趨勢線
+- [ ] 加入非保證紅利實現率滑桿 (壓力測試情景分析)
 - [ ] 匯出 PDF 報告功能
 - [ ] 支援多份保單對比
 - [ ] 針對主要保險公司 (Manulife, AIA, Prudential, AXA 等) 優化解析規則
 
 ## 免責聲明
 
-本工具的計算結果基於 OCR 辨識出的數據，**僅供財務分析參考**。實際保單權益請以保險公司提供的正式文件為準。
+本工具的計算結果基於文件辨識，**僅供財務分析參考**。實際保單權益請以保險公司提供的正式文件為準。
 
 ---
 

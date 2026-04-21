@@ -1,12 +1,11 @@
-// Netlify Serverless Function: 保單分析
-// 接收上傳的 PDF 或圖片，使用 OCR 辨識，解析保單數據，並計算 IRR
+// Netlify Serverless Function: 保單分析 (輕量版)
+// 職責：接收前端已提取的文字 → 解析保單數據 → 計算 IRR → 回傳 JSON
+// 零原生依賴，保證 Netlify build 成功
 
-const { performOCR } = require('./lib/ocr');
 const { parsePolicyText } = require('./lib/parser');
 const { calculateMetrics } = require('./lib/calculator');
 
 exports.handler = async (event) => {
-    // CORS headers
     const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
@@ -28,24 +27,19 @@ exports.handler = async (event) => {
 
     try {
         const payload = JSON.parse(event.body || '{}');
-        const { filename, mimetype, data } = payload;
+        const { text } = payload;
 
-        if (!data) {
+        if (!text || typeof text !== 'string') {
             return {
                 statusCode: 400,
                 headers,
-                body: JSON.stringify({ error: '沒有收到檔案內容' })
+                body: JSON.stringify({ error: '沒有收到文字內容' })
             };
         }
 
-        const fileBuffer = Buffer.from(data, 'base64');
-        console.log(`[analyze] 收到檔案：${filename} (${mimetype}), 大小 ${fileBuffer.length} bytes`);
+        console.log(`[analyze] 收到文字 ${text.length} 字元`);
 
-        // 1. OCR 辨識
-        const text = await performOCR(fileBuffer, mimetype);
-        console.log(`[analyze] OCR 完成，文字長度 ${text.length}`);
-
-        // 2. 解析保單數據
+        // 解析保單數據
         const policyData = parsePolicyText(text);
         console.log(`[analyze] 解析出 ${policyData.length} 筆保單年度數據`);
 
@@ -55,13 +49,12 @@ exports.handler = async (event) => {
                 headers,
                 body: JSON.stringify({
                     data: [],
-                    rawText: text.substring(0, 500),
                     error: '未能從文件中解析出保單數據'
                 })
             };
         }
 
-        // 3. 計算 IRR 等指標
+        // 計算 IRR
         const results = calculateMetrics(policyData);
 
         return {

@@ -21,14 +21,17 @@
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                 </svg>
                 <p class="upload-text">將文件拖放到此處，或<span>點擊選擇文件</span></p>
-                <p class="upload-hint">支援 PDF、PNG、JPG 格式</p>
+                <p class="upload-hint">支援 PDF、PNG、JPG 格式（上限 20MB）</p>
                 <input type="file" id="file-input" accept=".pdf,image/*" hidden>
             </div>
 
             <div id="loading" class="loading" style="display: none;">
                 <div class="spinner"></div>
                 <p id="loading-text">正在分析文件，請稍候...</p>
-                <p class="loading-hint">OCR 辨識可能需要 30 秒至 1 分鐘</p>
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <p id="progress-text" class="loading-hint"></p>
             </div>
 
             <div id="error-message" class="error-message" style="display: none;"></div>
@@ -36,11 +39,15 @@
             <div id="result-container" class="result-container" style="display: none;">
                 <div class="result-header">
                     <h2>分析結果</h2>
-                    <button id="reset-btn" class="reset-btn">重新上傳</button>
+                    <div class="result-actions">
+                        <button id="view-raw-btn" class="secondary-btn" title="檢視原始辨識文字">原始文字</button>
+                        <button id="reset-btn" class="reset-btn">重新上傳</button>
+                    </div>
                 </div>
                 <div id="summary" class="summary"></div>
                 <div id="table-wrapper" class="table-wrapper"></div>
-                <p class="disclaimer">* 年化回報率 (IRR) 基於 OCR 辨識結果計算，僅供參考。實際數據請以保險公司提供的正式文件為準。</p>
+                <div id="raw-text" class="raw-text" style="display:none;"></div>
+                <p class="disclaimer">* 年化回報率 (IRR) 基於文件辨識結果計算，僅供參考。實際數據請以保險公司提供的正式文件為準。</p>
             </div>
         </main>
 
@@ -48,6 +55,11 @@
             <p>&copy; 2026 保單回報分析工具 | 專業財務策劃顧問輔助工具</p>
         </footer>
     </div>
+
+    <!-- PDF.js (從 CDN 載入) -->
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+    <!-- Tesseract.js (從 CDN 載入) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 
     <script src="script.js"></script>
 </body>

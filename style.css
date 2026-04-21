@@ -288,3 +288,61 @@ footer {
         font-size: 13px;
     }
 }
+
+/* 進度條 */
+.progress-bar {
+    width: 80%;
+    max-width: 400px;
+    height: 6px;
+    background: #eef4fa;
+    border-radius: 3px;
+    margin: 14px auto 10px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #1a2c4e, #2c4373);
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+/* 結果區右側按鈕群 */
+.result-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.secondary-btn {
+    background: #fafbfd;
+    color: #8a9bb3;
+    border: 1px solid #d0dbe5;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.secondary-btn:hover {
+    background: #eef4fa;
+    color: #2c4373;
+    border-color: #2c4373;
+}
+
+/* 原始文字檢視 */
+.raw-text {
+    margin-top: 20px;
+    padding: 16px;
+    background: #1a2c4e;
+    color: #c3d1e0;
+    border-radius: 8px;
+    font-family: "SF Mono", Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 400px;
+    overflow-y: auto;
+}

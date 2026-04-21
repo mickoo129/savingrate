@@ -1,23 +1,39 @@
+// 前端主邏輯：
+// 1. 接收使用者上傳的 PDF / 圖片
+// 2. PDF: 先嘗試直接提取文字 (pdf.js)，若是掃描版 PDF 則退回 OCR
+// 3. 圖片: 直接用 tesseract.js OCR
+// 4. 將抽出的文字送到 Netlify Function 做解析 + IRR 計算
+// 5. 顯示表格
+
+// PDF.js worker
+if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const uploadArea = document.getElementById('upload-area');
     const fileInput = document.getElementById('file-input');
     const loading = document.getElementById('loading');
     const loadingText = document.getElementById('loading-text');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
     const resultContainer = document.getElementById('result-container');
     const tableWrapper = document.getElementById('table-wrapper');
     const summaryEl = document.getElementById('summary');
     const errorMessage = document.getElementById('error-message');
     const resetBtn = document.getElementById('reset-btn');
+    const viewRawBtn = document.getElementById('view-raw-btn');
+    const rawTextEl = document.getElementById('raw-text');
 
-    // 觸發檔案選擇
+    let lastRawText = '';
+
+    // 上傳事件
     uploadArea.addEventListener('click', () => fileInput.click());
-
-    fileInput.addEventListener('change', (event) => {
-        const files = event.target.files;
-        if (files.length > 0) handleFile(files[0]);
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) handleFile(e.target.files[0]);
     });
 
-    // 拖放
     uploadArea.addEventListener('dragover', (e) => {
         e.preventDefault();
         uploadArea.classList.add('dragover');
@@ -29,20 +45,30 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
     });
 
-    // 重新上傳
     resetBtn.addEventListener('click', () => {
         resultContainer.style.display = 'none';
         errorMessage.style.display = 'none';
         uploadArea.style.display = 'block';
         fileInput.value = '';
+        rawTextEl.style.display = 'none';
     });
 
-    // 處理檔案
+    viewRawBtn.addEventListener('click', () => {
+        if (rawTextEl.style.display === 'none') {
+            rawTextEl.textContent = lastRawText || '(沒有原始文字)';
+            rawTextEl.style.display = 'block';
+            viewRawBtn.textContent = '隱藏原始文字';
+        } else {
+            rawTextEl.style.display = 'none';
+            viewRawBtn.textContent = '原始文字';
+        }
+    });
+
+    // 主流程
     async function handleFile(file) {
-        // 檢查檔案大小 (Netlify Functions 上限約 6MB)
-        const maxSize = 6 * 1024 * 1024;
+        const maxSize = 20 * 1024 * 1024;
         if (file.size > maxSize) {
-            displayError('檔案過大 (上限 6MB)，請壓縮後再上傳。');
+            displayError('檔案過大 (上限 20MB)，請壓縮後再上傳。');
             return;
         }
 
@@ -50,19 +76,41 @@ document.addEventListener('DOMContentLoaded', () => {
         resultContainer.style.display = 'none';
         errorMessage.style.display = 'none';
         loading.style.display = 'block';
-        loadingText.textContent = '正在上傳並分析文件，請稍候...';
+        updateProgress(0, '準備中...');
 
         try {
-            const base64File = await fileToBase64(file);
+            let text = '';
 
+            if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                // PDF 處理
+                updateProgress(5, '讀取 PDF...');
+                text = await extractTextFromPDF(file);
+
+                // 若直接提取的文字太少，可能是掃描版 PDF，改用 OCR
+                if (text.trim().length < 100) {
+                    updateProgress(15, '偵測到掃描版 PDF，啟動 OCR...');
+                    text = await ocrPDF(file);
+                }
+            } else if (file.type.startsWith('image/')) {
+                // 圖片處理
+                updateProgress(10, '啟動 OCR 辨識...');
+                text = await ocrImage(file);
+            } else {
+                throw new Error('不支援的檔案格式，請上傳 PDF 或圖片。');
+            }
+
+            lastRawText = text;
+
+            if (!text || text.trim().length < 20) {
+                throw new Error('無法從文件中讀取到足夠的文字內容，請確認文件清晰度。');
+            }
+
+            // 送到後端進行數據解析 + IRR 計算
+            updateProgress(92, '分析數據與計算 IRR...');
             const response = await fetch('/.netlify/functions/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename: file.name,
-                    mimetype: file.type,
-                    data: base64File
-                })
+                body: JSON.stringify({ text: text })
             });
 
             const result = await response.json();
@@ -72,9 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (!result.data || result.data.length === 0) {
-                throw new Error('無法從文件中識別出保單數據。請確認文件清晰、包含標準的保單年度與金額表格。');
+                throw new Error('無法從文件中識別出保單數據。請確認文件清晰、包含標準的保單年度與金額表格。您可以點擊「原始文字」檢視辨識結果。');
             }
 
+            updateProgress(100, '完成');
             displayResults(result);
         } catch (error) {
             console.error('分析失敗：', error);
@@ -82,17 +131,85 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 檔案轉 Base64
-    function fileToBase64(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = (err) => reject(err);
-        });
+    // 從 PDF 直接提取文字 (不需 OCR)
+    async function extractTextFromPDF(file) {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let allText = '';
+
+        const maxPages = Math.min(pdf.numPages, 20);  // 最多處理 20 頁
+        for (let i = 1; i <= maxPages; i++) {
+            updateProgress(5 + (i / maxPages) * 10, `讀取 PDF 第 ${i}/${maxPages} 頁...`);
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const pageText = content.items.map(item => item.str).join(' ');
+            allText += pageText + '\n';
+        }
+
+        return allText;
     }
 
-    // 顯示錯誤
+    // 掃描版 PDF 的 OCR 處理
+    async function ocrPDF(file) {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const maxPages = Math.min(pdf.numPages, 5);  // OCR 慢，只處理前 5 頁
+        let allText = '';
+
+        const worker = await window.Tesseract.createWorker(['chi_tra', 'eng'], 1, {
+            logger: (m) => {
+                if (m.status === 'recognizing text') {
+                    const base = 15 + (m.progress * 75);
+                    updateProgress(base, `OCR 辨識中 ${Math.round(m.progress * 100)}%...`);
+                }
+            }
+        });
+
+        try {
+            for (let i = 1; i <= maxPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 2.0 });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const ctx = canvas.getContext('2d');
+
+                await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+                const { data: { text } } = await worker.recognize(canvas);
+                allText += text + '\n';
+            }
+        } finally {
+            await worker.terminate();
+        }
+
+        return allText;
+    }
+
+    // 圖片 OCR
+    async function ocrImage(file) {
+        const worker = await window.Tesseract.createWorker(['chi_tra', 'eng'], 1, {
+            logger: (m) => {
+                if (m.status === 'recognizing text') {
+                    const base = 10 + (m.progress * 80);
+                    updateProgress(base, `OCR 辨識中 ${Math.round(m.progress * 100)}%...`);
+                }
+            }
+        });
+
+        try {
+            const { data: { text } } = await worker.recognize(file);
+            return text;
+        } finally {
+            await worker.terminate();
+        }
+    }
+
+    function updateProgress(percent, msg) {
+        progressFill.style.width = Math.min(100, percent) + '%';
+        if (msg) progressText.textContent = msg;
+    }
+
     function displayError(message) {
         loading.style.display = 'none';
         errorMessage.textContent = '分析失敗：' + message;
@@ -100,15 +217,13 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadArea.style.display = 'block';
     }
 
-    // 顯示結果
     function displayResults(result) {
         loading.style.display = 'none';
         const data = result.data;
 
-        // 摘要卡片
         const lastRow = data[data.length - 1];
-        const breakevenYear = data.find(r => r.netReturn >= 0);
-        const breakevenText = breakevenYear ? `第 ${breakevenYear.year} 年` : '未達回本';
+        const breakevenRow = data.find(r => r.netReturn >= 0);
+        const breakevenText = breakevenRow ? `第 ${breakevenRow.year} 年` : '未達回本';
 
         summaryEl.innerHTML = `
             <div class="summary-card">
@@ -129,7 +244,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
-        // 表格
         let tableHTML = `
             <table>
                 <thead>
@@ -146,7 +260,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 <tbody>
         `;
 
-        // 每 5 年一個里程碑行（highlighted）
         data.forEach(row => {
             const isMilestone = row.year % 5 === 0;
             tableHTML += `
@@ -167,13 +280,13 @@ document.addEventListener('DOMContentLoaded', () => {
         resultContainer.style.display = 'block';
     }
 
-    function formatCurrency(number) {
-        if (number === null || number === undefined || isNaN(number)) return '—';
-        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(number));
+    function formatCurrency(n) {
+        if (n === null || n === undefined || isNaN(n)) return '—';
+        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(n));
     }
 
-    function formatPercent(number) {
-        if (number === null || number === undefined || isNaN(number)) return '—';
-        return number.toFixed(2) + '%';
+    function formatPercent(n) {
+        if (n === null || n === undefined || isNaN(n)) return '—';
+        return n.toFixed(2) + '%';
     }
 });
