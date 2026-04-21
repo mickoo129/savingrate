@@ -1,0 +1,11 @@
+{
+  "name": "savingrate-functions",
+  "version": "1.0.0",
+  "description": "保單分析工具的 Netlify Serverless Functions",
+  "private": true,
+  "dependencies": {
+    "tesseract.js": "^5.1.1",
+    "pdfjs-dist": "^3.11.174",
+    "canvas": "^2.11.2"
+  }
+}

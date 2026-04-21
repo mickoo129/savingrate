@@ -1,0 +1,24 @@
+# Netlify 部署設定
+
+[build]
+  # 靜態檔案直接從根目錄發佈
+  publish = "."
+  # Netlify Functions 目錄
+  functions = "netlify/functions"
+
+[functions]
+  # 使用 esbuild 打包 Functions
+  node_bundler = "esbuild"
+  # 包含非 JS 資源 (tesseract 的 wasm 和語言檔)
+  included_files = ["netlify/functions/lib/**"]
+  # 增加 Function 執行時間與記憶體
+  # (Netlify Pro 方案才能完整支援 26 秒以上，免費方案為 10 秒)
+
+[functions."analyze"]
+  # 為 OCR 函數特別設定外部依賴 (某些原生模組)
+  external_node_modules = ["canvas"]
+
+# 開發伺服器
+[dev]
+  port = 8888
+  publish = "."

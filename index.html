@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>保單回報分析工具</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>保單回報分析工具</h1>
+            <p class="subtitle">上傳 PDF 或圖片格式的保單文件，系統將自動分析每年的回報率 (IRR)</p>
+        </header>
+
+        <main>
+            <div id="upload-area" class="upload-area">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <p class="upload-text">將文件拖放到此處，或<span>點擊選擇文件</span></p>
+                <p class="upload-hint">支援 PDF、PNG、JPG 格式</p>
+                <input type="file" id="file-input" accept=".pdf,image/*" hidden>
+            </div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p id="loading-text">正在分析文件，請稍候...</p>
+                <p class="loading-hint">OCR 辨識可能需要 30 秒至 1 分鐘</p>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;"></div>
+
+            <div id="result-container" class="result-container" style="display: none;">
+                <div class="result-header">
+                    <h2>分析結果</h2>
+                    <button id="reset-btn" class="reset-btn">重新上傳</button>
+                </div>
+                <div id="summary" class="summary"></div>
+                <div id="table-wrapper" class="table-wrapper"></div>
+                <p class="disclaimer">* 年化回報率 (IRR) 基於 OCR 辨識結果計算，僅供參考。實際數據請以保險公司提供的正式文件為準。</p>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 保單回報分析工具 | 專業財務策劃顧問輔助工具</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
